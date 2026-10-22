@@ -1,0 +1,277 @@
+/**
+ * Shared domain types used by both the Electron main process and the renderer.
+ *
+ * Items are serialized in two places:
+ *   - the on-disk index (JSON in userData)
+ *   - the IPC payloads sent to the renderer
+ * Images are stored as separate PNG files referenced by `imageId`, while the
+ * renderer receives the bytes inline as a data URL so the UI never blocks on disk I/O.
+ */
+
+/** Maximum number of sub-items that may live in a single stack/bundle. */
+export const MAX_STACK = 10
+
+/**
+ * Hover open-delay slider bounds (ms). 0 keeps today's behaviour; ~1s is the
+ * point where a hover response stops feeling connected to the gesture.
+ */
+export const HOVER_OPEN_DELAY_MIN = 0
+export const HOVER_OPEN_DELAY_MAX = 1000
+export const HOVER_OPEN_DELAY_STEP = 50
+
+/** Clamp and snap a stored delay to the slider grid; anything invalid becomes 0. */
+export function normalizeHoverOpenDelay(value: unknown): number {
+  const n = typeof value === 'number' && Number.isFinite(value) ? value : 0
+  const snapped = Math.round(n / HOVER_OPEN_DELAY_STEP) * HOVER_OPEN_DELAY_STEP
+  return Math.min(HOVER_OPEN_DELAY_MAX, Math.max(HOVER_OPEN_DELAY_MIN, snapped))
+}
+
+/** Update behavior mode. See Settings.updateMode. */
+export type UpdateMode = 'auto' | 'notify' | 'off'
+
+const UPDATE_MODES: readonly UpdateMode[] = ['auto', 'notify', 'off']
+
+/**
+ * Resolve the effective update mode. Prefers the stored updateMode; migrates
+ * legacy autoUpdates booleans (true/missing -> 'auto', false -> 'notify') so
+ * upgraders keep getting told about updates without anything downloading
+ * behind their back. Pure 'off' is opt-in on the new selector.
+ */
+export function resolveUpdateMode(s: Pick<Settings, 'updateMode' | 'autoUpdates'>): UpdateMode {
+  if (s.updateMode === 'auto' || s.updateMode === 'notify' || s.updateMode === 'off') {
+    return s.updateMode
+  }
+  return s.autoUpdates === false ? 'notify' : 'auto'
+}
+
+export function isUpdateMode(value: unknown): value is UpdateMode {
+  return (UPDATE_MODES as readonly unknown[]).includes(value)
+}
+
+/** How a clipboard bitmap was captured. Omitted on older persisted items. */
+export type ClipboardImageSource = 'screenshot' | 'image'
+
+export type ClipboardImageFields = {
+  imageId: string
+  width: number
+  height: number
+  bytes: number
+  ext?: string
+  source?: ClipboardImageSource
+  fileName?: string
+}
+
+/** Discriminated union describing the payload of a clipboard item. */
+export type ItemData =
+  | { kind: 'text'; text: string; html?: string; isUrl: boolean; isColor?: boolean; hasFullPayload?: boolean; previewText?: string }
+  | ({ kind: 'image' } & ClipboardImageFields)
+  | { kind: 'image-collection'; images: ClipboardImageFields[] }
+  | { kind: 'files'; paths: string[]; entries?: FileEntry[] }
+
+export type ItemKind = ItemData['kind']
+
+export type TypeFilter = 'all' | 'text' | 'links' | 'images' | 'files' | 'colors'
+
+/**
+ * A single clipboard entry. `id` is stable across the lifetime of the entry;
+ * it is used as the React key and the storage key for pinned/persisted items.
+ */
+export interface ClipboardItem {
+  id: string
+  data: ItemData
+  /** Unix epoch ms of the moment the item was captured. */
+  capturedAt: number
+  /** Number of times this exact content has been captured. */
+  hitCount: number
+  /** Pinned items never scroll off and survive app restarts. */
+  pinned: boolean
+}
+
+/**
+ * Display metadata for a single file inside a `files` bundle.
+ * Computed by main from the path/extension + a stat() call; the internal
+ * `ItemData.files` model stays a plain path list so drag/merge/split logic
+ * is untouched, while the renderer gets what it needs to render richly.
+ */
+export interface FileEntry {
+  name: string
+  ext: string
+  size: number
+  isImage: boolean
+  isDirectory?: boolean
+  preview?: string
+}
+
+/** Payload sent over IPC: same as ClipboardItem but with inline image previews. */
+export interface ClipboardItemDto extends Omit<ClipboardItem, 'data'> {
+  data:
+  | { kind: 'text'; text: string; html?: string; isUrl: boolean; isColor?: boolean; hasFullPayload?: boolean; previewText?: string }
+  | ({ kind: 'image'; preview: string } & ClipboardImageFields)
+  | { kind: 'image-collection'; images: Array<ClipboardImageFields & { preview: string }> }
+  | { kind: 'files'; paths: string[]; previews?: string[]; entries?: FileEntry[] }
+}
+
+/** Section the renderer groups items into. */
+export type ItemSection = 'pinned' | 'shelf'
+
+export type StickPosition = 'left' | 'right' | 'top'
+
+export interface DisplayInfo {
+  id: number
+  bounds: { x: number; y: number; width: number; height: number }
+  isPrimary: boolean
+  isCurrent?: boolean
+  label: string
+  name: string
+  resolution: string
+}
+
+/**
+ * Request to begin a native OS drag-out of one item.
+ *
+ * `id` always identifies the source item. `paths` is an optional override that
+ * narrows a `files` bundle to a single path (used when dragging one file out of
+ * an expanded bundle). When omitted, main uses all of the item's content.
+ */
+export interface DragRequest {
+  id: string
+  paths?: string[]
+  imageId?: string
+  splitPlacement?: 'before' | 'after'
+}
+
+/**
+ * Outcome of a merge attempt. `reason` tells the renderer *why* it failed so it
+ * can show a precise message (e.g. "collection full" vs "can't mix types").
+ */
+export interface MergeResult {
+  ok: boolean
+  reason?: 'full' | 'incompatible' | 'notfound'
+  message?: string
+}
+
+export interface Settings {
+  /** Fraction of the screen height the hot zone occupies (0.2 - 0.6). */
+  hotZoneHeight: number
+  /** Physical thickness (in pixels) of the screen edge hover trigger. */
+  hotZoneWidth: number
+  /** Maximum number of unpinned history items kept. */
+  historyLimit: number
+  /** Fraction of the screen height the panel occupies (0.4 - 1.0). */
+  panelHeight: number
+  /** When true, newly captured items are not recorded. */
+  incognito: boolean
+  /** Start minimized when the OS logs in. */
+  launchAtLogin: boolean
+  /** Reduce motion for the panel animations. */
+  reduceMotion: boolean
+  /** When true, automatically clears unpinned items on device/app restart. */
+  /** When true, automatically clears unpinned items on device/app restart. */
+  clearUnpinnedOnRestart: boolean
+  /** Hours after which unpinned items are automatically purged (0 = Never). */
+  autoDeleteHours: number
+  /** UI visual style density ('modern' | 'compact'). */
+  uiStyle: 'modern' | 'compact'
+  /** Flag to track if the onboarding tutorial is completed. */
+  tutorialCompleted: boolean
+  stickPosition: StickPosition
+  stickDisplayId?: number
+  /**
+   * Persisted workArea geometry of the display chosen by the user.
+   * Used as a cross-reboot fuzzy-match fingerprint when the OS re-assigns
+   * numeric display IDs after a restart (Windows behaviour).
+   */
+  stickDisplayWorkArea?: { x: number; y: number; width: number; height: number }
+  /**
+   * DPI scale factor of the chosen display — used as a secondary discriminator
+   * when two displays share identical workArea geometry (e.g. dual same-res).
+   */
+  stickDisplayScaleFactor?: number
+  /**
+   * When true, automatically suppresses edge hover when a fullscreen game or app is active.
+   * On by default to prevent accidental opening during PC gameplay.
+   */
+  suppressInFullscreen: boolean
+  /** When true, shows the visual edge morph indicator on copy actions. Default: true. */
+  showCopyIndicator: boolean
+  /** Style variant of the copy indicator icon ('logo' | 'check' | 'copy' | 'sparkle'). Default: 'logo'. */
+  copyIndicatorStyle: 'logo' | 'check' | 'copy' | 'sparkle'
+  /** Vertical offset fraction along screen edge (0 = top, 0.5 = center, 1 = bottom). Default: 0.5. */
+  verticalOffset: number
+  /** Horizontal offset fraction along screen edge when positioned at top/bottom (0 = left, 0.5 = center, 1 = right). Default: 0.5. */
+  horizontalOffset?: number
+  /** Vertical or horizontal alignment of the hover trigger strip relative to shelf ('top' | 'center' | 'bottom' | 'left' | 'right'). Default: 'center'. */
+  triggerAlignment?: 'top' | 'center' | 'bottom' | 'left' | 'right'
+  /** When true, subtly illuminates a beacon hint on the screen edge when touching the edge at a different position. Default: true. */
+  showEdgeLocationHint?: boolean
+  /** When true, plays tactile audio sound effects for sliders, buttons, and switches. Default: true. */
+  soundEffects?: boolean
+  /** Last version for which the user opened/viewed the What's New changelog panel. */
+  lastSeenChangelogVersion?: string
+  /** When true, hovering cursor near edge activates the panel. When false, panel opens exclusively via Alt + C. Default: true. */
+  hoverActivation?: boolean
+  /**
+   * Extra wait (ms) at the edge before a hover opens the shelf, on top of the
+   * built-in 40ms dwell. Hover only — hotkey/tray stay instant.
+   * Range HOVER_OPEN_DELAY_MIN..MAX in HOVER_OPEN_DELAY_STEP steps. Default: 0.
+   */
+  hoverOpenDelay?: number
+  /** Font size scale multiplier (0.85 = Small, 1.00 = Normal, 1.15 = Large). Default: 1.0. */
+  fontSizeScale?: number
+  /** When true, automatically checks for and downloads app updates in background. Default: true. Legacy: kept in sync from updateMode for downgrade safety. */
+  autoUpdates?: boolean
+  /**
+   * Update behavior mode: 'auto' (check + download + prompt restart),
+   * 'notify' (check at launch, prompt with Download/Skip, never auto-download),
+   * 'off' (fully silent, zero network). Default: 'auto'. Supersedes autoUpdates.
+   */
+  updateMode?: UpdateMode
+  /** Version string the user skipped; that exact version is not re-prompted until a newer one appears. */
+  skippedUpdateVersion?: string
+  /** Active UI language code ('system' | 'en' | 'es' | 'fr' | 'de' | ...). Default: 'system'. */
+  language?: string
+  /** When true, pasting an unpinned item updates its timestamp to move it to the top of Recent. Default: true. */
+  movePastedToTop?: boolean
+  /** One-time flag tracking if the v0.2.6 upgrade unpinned history cleanup has run. */
+  v026UpgradeCleaned?: boolean
+  /** Configurable global hotkey accelerator to toggle Edge-Drop shelf (e.g. 'Alt+C', 'Alt+Shift+C'). Default: 'Alt+C'. */
+  toggleHotkey?: string
+}
+
+export const DEFAULT_SETTINGS: Settings = {
+  hotZoneHeight: 0.25,
+  hotZoneWidth: 3,
+  movePastedToTop: true,
+  historyLimit: 250,
+  panelHeight: 0.5,
+  incognito: false,
+  launchAtLogin: true,
+  reduceMotion: false,
+  clearUnpinnedOnRestart: false,
+  autoDeleteHours: 0,
+  uiStyle: 'modern',
+  tutorialCompleted: false,
+  stickPosition: 'left',
+  stickDisplayId: undefined,
+  stickDisplayWorkArea: undefined,
+  stickDisplayScaleFactor: undefined,
+  suppressInFullscreen: true,
+  showCopyIndicator: true,
+  copyIndicatorStyle: 'logo',
+  verticalOffset: 0.5,
+  horizontalOffset: 0.5,
+  triggerAlignment: 'center',
+  showEdgeLocationHint: false,
+  soundEffects: true,
+  lastSeenChangelogVersion: undefined,
+  hoverActivation: true,
+  hoverOpenDelay: 0,
+  fontSizeScale: 1.0,
+  autoUpdates: true,
+  updateMode: 'auto',
+  skippedUpdateVersion: undefined,
+  language: 'system',
+  toggleHotkey: 'Alt+C'
+}
+
+
