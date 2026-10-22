@@ -1,0 +1,139 @@
+{
+  "name": "edge-drop",
+  "version": "0.3.3",
+  "description": "Edge-Drop — a clipboard manager that lives on the left edge of your screen and expands on hover.",
+  "author": "Edge-Drop",
+  "license": "Apache-2.0",
+  "private": true,
+  "main": "out/main/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "build:github": "npm run build && electron-builder --win nsis -c.extraMetadata.buildTarget=github",
+    "build:store": "npm run build && electron-builder --win appx -c.extraMetadata.buildTarget=store",
+    "build:msix": "npm run build && electron-builder --win appx -c.extraMetadata.buildTarget=store",
+    "build:win": "npm run build:github",
+    "package": "npm run build:github",
+    "preview": "electron-vite preview",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "test": "vitest run"
+  },
+  "build": {
+    "appId": "com.edgedrop.app",
+    "productName": "Edge-Drop",
+    "directories": {
+      "output": "dist",
+      "buildResources": "resources"
+    },
+    "files": [
+      "out/**/*",
+      "!out/renderer/**/*.gif",
+      "resources/**/*",
+      "!resources/startup/**/*.exe",
+      "!resources/startup/**/*.cs",
+      "!resources/appx/**",
+      "package.json",
+      "!**/node_modules/emoji-datasource-twitter/**",
+      "!**/node_modules/gsap/**",
+      "!**/node_modules/framer-motion/**",
+      "!**/node_modules/@fontsource/**",
+      "!**/node_modules/@radix-ui/**",
+      "!**/node_modules/svg-path-bbox/**",
+      "!**/node_modules/react-dom/**",
+      "!**/node_modules/prism-react-renderer/**",
+      "!**/node_modules/koffi/doc/**"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/startup/EdgeDropStartup.exe",
+        "to": "startup/EdgeDropStartup.exe"
+      },
+      {
+        "from": "node_modules/emoji-datasource-twitter/img/twitter/64",
+        "to": "emoji/64"
+      }
+    ],
+    "asarUnpack": [
+      "**/*.{node,dll}",
+      "**/node_modules/koffi/**/*",
+      "**/node_modules/@koromix/**/*",
+      "**/node_modules/@resvg/**/*"
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "Deepender25",
+      "repo": "Edge-Drop"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "appx",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "resources/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "Edge-Drop",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "artifactName": "Edge-Drop-Setup-${version}.${ext}"
+    },
+    "appx": {
+      "identityName": "Deepender.EdgeDrop",
+      "publisher": "CN=55FECDC4-7144-4A41-98FC-056C003F76FD",
+      "publisherDisplayName": "Deepender",
+      "applicationId": "EdgeDrop",
+      "displayName": "Edge Drop",
+      "capabilities": [
+        "runFullTrust",
+        "internetClient"
+      ],
+      "customExtensionsPath": "resources/appx/startup-extensions.xml"
+    }
+  },
+  "devDependencies": {
+    "@fontsource/jetbrains-mono": "^5.3.0",
+    "@fontsource/plus-jakarta-sans": "^5.3.0",
+    "@radix-ui/react-scroll-area": "^1.2.13",
+    "@radix-ui/react-separator": "^1.1.11",
+    "@types/node": "^20.11.30",
+    "@types/react": "^18.2.73",
+    "@types/react-dom": "^18.2.22",
+    "@vitalets/google-translate-api": "^9.2.1",
+    "@vitejs/plugin-react": "^4.2.1",
+    "electron": "^34.2.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^2.1.0",
+    "emoji-datasource-twitter": "^16.0.0",
+    "framer-motion": "^11.0.24",
+    "gsap": "^3.15.0",
+    "prism-react-renderer": "^2.4.1",
+    "react-dom": "^18.2.0",
+    "svg-path-bbox": "^2.1.0",
+    "typescript": "^5.4.3",
+    "vite": "^5.2.6",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2",
+    "electron-updater": "^6.8.9",
+    "koffi": "^3.1.2",
+    "react": "^18.2.0",
+    "zustand": "^4.5.2"
+  }
+}
