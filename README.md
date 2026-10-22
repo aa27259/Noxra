@@ -154,5 +154,5 @@ MIT License — see [LICENSE](LICENSE). Commercial and non-commercial use, modif
 ---
 
 <p align="center">
-  <sub>Support Noxra Star on <a href="https://github.com/Deepender25/Edge-Drop" target="_blank">GitHub ⭐</a></sub>
+  <sub>Support Noxra Star on <a href="https://github.com/aa27259/Noxra" target="_blank">GitHub ⭐</a></sub>
 </p>
