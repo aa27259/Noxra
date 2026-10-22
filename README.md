@@ -115,7 +115,7 @@ Preview
 # Project Structure
 
 ```
-Edge-Drop/
+Noxra/
 ├─ shared/                 Typed IPC contracts & domain models
 │  ├─ types.ts             ClipboardItem, Bundle, Settings, DragRequest DTOs
 │  ├─ bridge.ts            EdgeApi preload interface
